@@ -1,0 +1,159 @@
+## Load packages
+
+library(sva)
+library(DESeq2)
+library(pcaExplorer)
+library(pheatmap)
+library(RColorBrewer)
+library(dplyr)
+library(VennDiagram)
+library(tibble)
+library(EnhancedVolcano)
+library(repr)
+
+## Read counts data
+all.counts <- read.csv("read_counts.csv")
+rownames(all.counts) <- make.names(all.counts$Gene_ID, unique=TRUE)
+all.counts <- all.counts %>% select(-"Gene_ID")
+head(all.counts)
+
+## Read sample metadata
+sample_info <- read.csv("metadata.csv", row.names = 1)
+sample_info <- sample_info[colnames(all.counts),]
+dim(sample_info)
+sample_info
+
+### 3 Group comparison
+
+## Setup the dds object
+dds <- DESeqDataSetFromMatrix(countData = coding.counts, colData = sample_info,
+                             design = ~ Batch + Groups)
+dds$Groups <- relevel(dds$Groups, "CB") # other subsets - CB
+
+## Pre-filter the genes to keep only those that have read counts is higher than 1.
+idx<- rowSums(counts(dds) >= 1) >= 15
+dds<- dds[idx,]
+dim(dds)
+
+## Run DESeq
+dds<- DESeq(dds)
+res_all<- results(dds)
+res_alldf<- as.data.frame(res_all)
+
+## DE genes between CB and the other two subsets (apply filters)
+de_all <- res_alldf %>% rownames_to_column('id') %>% filter(padj <= 0.05, log2FoldChange >= 1 | log2FoldChange <= -1) %>%
+                                         arrange(padj)
+rownames(de_all) <- de_all$id
+de_all <- de_all %>% select(-"id")
+head(de_all)
+dim(de_all)
+
+## Export table
+write.table(de_all, 'DEgenes_CB_vs_all.csv', quote = FALSE, sep = ',')
+# +ve is more in DP and DN, -ve is more is CB
+
+## VST transformation
+vst_all <- vst(dds, blind = FALSE)
+
+## PCA plot before batch correction
+options(repr.plot.width=10, repr.plot.height=10)
+plotPCA(vst_all, ntop = 2000, intgroup = c("Batch"))
+
+## Batch correction
+sbatch <- sample_info$Batch
+dat <-as.matrix(assay(vst_all))
+
+## Normalize by sequencing batch for batch correction
+batch_norm <- ComBat(dat, batch = sbatch, mod = model, par.prior = TRUE, prior.plots = TRUE)
+model <- model.matrix (~ Groups, data = sample_info)
+
+## Overwrite VSD data
+assay(vst_all) <- batch_norm
+
+## Generate PCA plot after batch normalization
+options(repr.plot.width=10, repr.plot.height=10)
+pcaplot(vst_all, ntop = 2000, intgroup = c("Batch"), pcX = 1, pcY = 2, point_size = 5, 
+        text_labels = F, ellipse.prob = 0.95)
+
+## Scaled dataframe for DE genes
+all_samples <- as.data.frame(assay(vst_all))[res_alldf %>% 
+                    rownames_to_column('id') %>% filter(padj < 0.05, log2FoldChange > 1 | log2FoldChange < -1) %>%
+                                         arrange(padj) %>% select('id') %>% unlist,]#[0:200,]
+scaled_all <- scale(t(all_samples)) # z-score of rows
+head(scaled_all)
+
+## Following code limits the lowest and highest color
+palette.breaks <- seq(-max(scaled_all), max(scaled_all), 0.2)
+
+## Use http://colorbrewer2.org/ to find optimal divergent color palette (or set own)
+color.palette  <- colorRampPalette(rev(c("#67001f",
+                                         "#b2182b",
+                                         "#d6604d",
+                                         "#f4a582",
+                                         "#fddbc7",
+                                         "#f7f7f7",
+                                         "#d1e5f0",
+                                         "#92c5de",
+                                         "#4393c3",
+                                         "#2166ac",
+                                         "#053061")))(length(palette.breaks) - 1)
+
+options(repr.plot.width=12, repr.plot.height=12)
+pheatmap(t(scaled_all),cluster_rows= T, show_rownames= T,cluster_cols= T, show_colnames = F, 
+         annotation_col = anot, fontsize_row = 5, cex=1, clustering_distance_rows = "manhattan", 
+         clustering_distance_cols = "manhattan",col = color.palette,breaks = palette.breaks)
+         
+
+### 2 x 2 Comparisions of the samples
+
+## DESeq between CD21-CD35- and CD21+CD35+
+dds_dpdn <- results(dds, contrast = c('Groups','DN','DP'))
+res_dpdn <- as.data.frame(dds_dpdn)
+head(res_dpdn)
+
+## DEG between CD21-CD35- and CD21+CD35+
+de_dpdn <- res_dpdn %>% rownames_to_column('id') %>% filter(padj <= 0.05, log2FoldChange >= 1 | log2FoldChange <= -1) %>%
+                                         arrange(padj)
+rownames(de_dpdn) <- de_dpdn$id
+de_dpdn <- de_dpdn %>% select(-"id")
+head(de_dpdn)
+dim(de_dpdn)
+
+## Export the table
+write.table(de_dpdn, 'DEgenes_DP_vs_DN.csv', quote = FALSE, sep = ',')
+# +ve is more in DN, -ve is more is DP
+
+## DESeq between Cord Blood and CD21+CD35+
+dds_dpcb <- results(dds, contrast = c('Groups','DP','CB'))
+res_dpcb <- as.data.frame(dds_dpcb)
+head(res_dpcb)
+
+## DEG between CD21+CD35+ and Cord Blood
+de_dpcb <- res_dpcb %>% rownames_to_column('id') %>% filter(padj <= 0.05, log2FoldChange >= 1 | log2FoldChange <= -1) %>%
+                                         arrange(padj)
+rownames(de_dpcb) <- de_dpcb$id
+de_dpcb <- de_dpcb %>% select(-"id")
+head(de_dpcb)
+dim(de_dpcb)
+
+## Export the table
+write.table(de_dpcb, 'DEgenes_DP_vs_CB.csv', quote = FALSE, sep = ',')
+# +ve is more in DP, -ve is more is CB
+
+## DESeq between CD21-CD35- and Cord Blood
+dds_dncb <- results(dds, contrast = c('Groups','DN','CB'))
+res_dncb <- as.data.frame(dds_dncb)
+head(res_dncb)
+
+## DEG between CD21-CD35- and Cord Blood
+de_dncb <- res_dncb %>% rownames_to_column('id') %>% filter(padj <= 0.05, log2FoldChange >= 1 | log2FoldChange <= -1) %>%
+                                         arrange(padj)
+rownames(de_dncb) <- de_dncb$id
+de_dncb <- de_dncb %>% select(-"id")
+head(de_dncb)
+dim(de_dncb)
+
+## Export the table
+write.table(de_dncb, 'DEgenes_DN_vs_CB.csv', quote = FALSE, sep = ',')
+# +ve is more in DN, -ve is more is CB
+
