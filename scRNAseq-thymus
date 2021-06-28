@@ -1,0 +1,127 @@
+library(BiocManager)
+library(patchwork)
+library(cowplot)
+library(devtools)
+library(Seurat)
+library(metap)
+library(cluster)
+library(umap)
+library(pheatmap)
+library(MAST)
+library(ggplot2)
+library(dplyr)
+library(ggrepel)
+library(rjags)
+library(coda)
+library(infercnv)
+library(MASS)
+library(Hmisc)
+library(ggpubr)
+
+#Load the data CellRanger data into the R
+thymus1 <- Read10X(data.dir="E:\\...\\HE001_Filtered gene bc matrices")
+thymus2<- Read10X(data.dir="E:\\...\\HE002_Filtered gene bc matrices")
+
+#Create the Seurat Object
+sample1 <- CreateSeuratObject(counts = thymus1, project = "he001", min.cells = 3, min.features = 200)
+sample2 <- CreateSeuratObject(counts = thymus2, project = "he002", min.cells = 3, min.features = 200)
+
+#Merge both Seurat Objects
+thymuscomb <- merge(sample1, y = sample2, add.cell.ids = c("4months", "4days"), project = "thymus")
+thymuscomb
+
+#Notice the cell names now have an added identifier
+head(colnames(thymuscomb))
+
+#See the number of cells per sample
+table(thymuscomb$orig.ident)
+
+#Check the mitochondrial genes
+thymuscomb[["percent.mt"]] <- PercentageFeatureSet(thymuscomb, pattern = "^MT-")
+VlnPlot(thymuscomb, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), pt.size = 0.2, ncol = 3)
+
+#filtration
+thymuscomb <- subset(thymuscomb, subset = nCount_RNA > 1000 & nFeature_RNA < 3000 & percent.mt < 10)
+
+#Split the objects
+thymuscomb.list <- SplitObject(thymuscomb, split.by = "orig.ident")
+thymuscomb.list <- lapply(X = thymuscomb.list, FUN = function(x) {
+  x <- NormalizeData(x)
+  x <- FindVariableFeatures(x, selection.method = "vst", nfeatures = 2000)
+})
+
+#Perform the integration
+thymus.anchors <- FindIntegrationAnchors(object.list = thymuscomb.list, dims = 1:30)
+thymus.combined <- IntegrateData(anchorset = thymus.anchors, dims = 1:30)
+
+# Run the standard workflow for visualization and clustering
+thymus.combined <- ScaleData(thymus.combined, verbose = FALSE)
+thymus.combined <- RunPCA(thymus.combined, npcs = 30, verbose = FALSE)
+
+# t-SNE and Clustering
+thymus.combined <- RunUMAP(thymus.combined, reduction = "pca", dims = 1:30)
+thymus.combined <- FindNeighbors(thymus.combined, reduction = "pca", dims = 1:30)
+thymus.combined <- FindClusters(thymus.combined, resolution = 0.2)
+
+#Visualization (by group and by clusters)
+p1 <- DimPlot(thymus.combined, reduction = "umap", group.by = "orig.ident")
+p2 <- DimPlot(thymus.combined, reduction = "umap", label = TRUE)
+plot_grid(p1, p2)
+
+#Visualization by cluster in each group
+DimPlot(thymus.combined, reduction = "umap", split.by = "orig.ident")
+--------------------------------------------------------------------------------
+#Remove contamined cluster  
+bcell.combined = thymus.combined[,thymus.combined$seurat_clusters %in% c(0,1,2,3)]
+plot(DimPlot(bcell.combined, reduction = "umap",label=TRUE,repel=T))
+
+# Run the standard workflow for visualization and clustering
+bcell.combined <- ScaleData(bcell.combined, verbose = FALSE)
+bcell.combined <- RunPCA(bcell.combined, npcs = 30, verbose = FALSE)
+
+# t-SNE and Clustering
+bcell.combined <- RunUMAP(bcell.combined, reduction = "pca", dims = 1:30)
+bcell.combined <- FindNeighbors(bcell.combined, reduction = "pca", dims = 1:30)
+bcell.combined <- FindClusters(bcell.combined, resolution = 0.2)
+
+#Visualization (by group and by clusters)
+p1 <- DimPlot(bcell.combined, reduction = "umap", group.by = "orig.ident")
+p2 <- DimPlot(bcell.combined, reduction = "umap", label = TRUE)
+plot_grid(p1, p2)
+
+#Visualization by cluster in each group
+DimPlot(bcell.combined, reduction = "umap", split.by = "orig.ident")
+
+#Save RDS file
+saveRDS(bcell.combined, file = "E:\\...\\thymus_bcellsonly.rds")
+
+#Find markers for every cluster compared to all remaining cells, report only the positive ones
+bcell.markers <- FindAllMarkers(bcell.combined, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+bcell.markers %>%
+  group_by(cluster) %>%
+  top_n(n = 30, wt = avg_log2FC)
+
+#Save excel with the markers
+write.table(bcell.markers, 'bcellmarkers.csv', quote = FALSE, sep = ',',)
+
+#Visualize plasma cell markers
+FeaturePlot(bcell.combined, features = c("IGHG1", "IGHG2", "IGHG3", "IGHG4", "IGHA1", "IGHA2", "IGHM", "IGHE"),
+            pt.size = 1, cols = c("lightgrey", "red"), min.cutoff = "q9")
+
+#Visualize key markers for each cluster
+FeaturePlot(bcell.combined, features = c("MKI67", "PCNA", "HMGB2", "UBE2C", "TYMS"),
+            pt.size = 1, cols = c("lightgrey", "red"), min.cutoff = "q9")
+            
+FeaturePlot(bcell.combined, features = c("CCL22", "CCL17", "CCL4", "CD9", "EBI3"),
+            pt.size = 1, cols = c("lightgrey", "red"), min.cutoff = "q9")            
+     
+FeaturePlot(bcell.combined, features = c("HLA-DQA1", "CD86", "CD69", "IGHD", "LY86"),
+            pt.size = 1, cols = c("lightgrey", "red"), min.cutoff = "q9")
+            
+FeaturePlot(bcell.combined, features = c("SDC1", "MZB1", "XBP1", "PRDM1", "JCHAIN"),
+            pt.size = 1, cols = c("lightgrey", "red"), min.cutoff = "q9")
+
+#Generate heatmaps with the top 30 genes for each cluster
+DoHeatmap(bcell.markers, features = top30$gene) + scale_fill_gradientn(colors = c("blue", "white", "red")) + theme(axis.text.y = element_text(size=4))
+DimPlot(bcell.markers, label = FALSE)
+
