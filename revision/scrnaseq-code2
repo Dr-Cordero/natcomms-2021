@@ -1,0 +1,943 @@
+###Script of Single Cell Data for the revised version of manuscript. 
+
+##Install and load the following packages:
+library(devtools)
+library(patchwork)
+library(Seurat)
+library(sctransform)
+library(ggplot2)
+library(viridis)
+library(ggpubr)
+library(cowplot)
+library(clustree)
+library(glmGamPoi)
+library(MAST)
+library(SeuratWrappers)
+library(dplyr)
+library(velocyto.R)
+
+##Set up the working directory
+setwd('/.../scRNA_seq_data')
+
+##Donor HE001
+
+#Load and pre-process HE001 data
+HE001_data <- Read10X(data.dir = 'HE001-Donor72/')
+
+#Create a seurat object for HE001
+HE001 <- CreateSeuratObject(count = HE001_data, project = 'HE001', min.cells = 5)
+HE001$donor <- "HE001_donor_72"
+HE001$ag_gp <- "4mo"
+
+#QC filtering for HE001
+HE001[["percent.mt"]] <- PercentageFeatureSet(object = HE001, pattern = "^MT-")
+HE001 <- subset(x = HE001, subset = nFeature_RNA > 200 & 
+                    nFeature_RNA < 4000 & 
+                    percent.mt >  -Inf & percent.mt < 5)
+
+#SCT Transformation
+HE001 <- SCTransform(HE001, method = "glmGamPoi", 
+                     vars.to.regress = c("nCount_RNA","percent.mt"),
+                     verbose = FALSE)
+
+#Run PCA dim reduction
+HE001 <- RunPCA(HE001, verbose = FALSE)
+HE001 <- RunUMAP(HE001, reduction = "pca", dims = 1:30)
+
+#Find neighbors and identify clusters
+HE001 <- FindNeighbors(HE001, reduction = "pca", dims = 1:30)
+HE001 <- FindClusters(HE001, verbose = F)
+
+#Visualization
+p1 <- DimPlot(HE001, reduction = "umap", group.by = "orig.ident")
+p2 <- DimPlot(HE001, reduction = "umap", label = TRUE, repel = TRUE)
+p1 + p2
+
+#Plot select genes
+FeaturePlot(object = HE001, features = c("TRDC"), 
+            label = TRUE, pt.size = 0.5, cols = c("lightgrey","red"), 
+            min.cutoff = "q9")
+
+#Load loom file for HE001
+ldat <- ReadVelocity(file = "/velo_HE001/possorted_genome_bam_KMAE4.loom")
+
+#Rename columns of loom file and merge with Seurat object
+for (i in names(x = ldat)) {
+  # Store assay in a new variable
+  assay <- ldat[[i]]
+
+#Rename cell names in loom file to match cell names in Seurat object
+  colnames(assay) <- gsub('possorted_genome_bam_KMAE4:', '', colnames(assay))
+  colnames(assay) <- gsub('x', '', colnames(assay))
+  colnames(assay) <- paste(colnames(assay), "-1", sep = "")
+  
+#Subset to filtered cells in Seurat object
+  assay <- assay[,colnames(HE001)]
+  
+#Add assay to Seurat object
+  HE001[[i]] <- CreateAssayObject(counts = assay)
+  }
+
+HE001
+
+----------------------------------------------------------------------------------------------------
+
+##Donor HE002
+
+#Load and pre-process HE002 data
+HE002_data <- Read10X(data.dir = 'HE002-Donor127/')
+
+#Create a seurat object for this donor
+HE002 <- CreateSeuratObject(count = HE002_data, project = 'HE002', min.cells = 5)
+HE002$donor <- "HE002_donor_127"
+HE002$ag_gp <- "4day"
+
+#QC filtering for HE002
+HE002[["percent.mt"]] <- PercentageFeatureSet(object = HE002, pattern = "^MT-")
+HE002 <- subset(x = HE002, subset = nFeature_RNA > 200 & 
+                     nFeature_RNA < 4000 & 
+                     percent.mt > -Inf & percent.mt < 4)
+
+#SCT Transformation
+HE002 <- SCTransform(HE002, method = "glmGamPoi", 
+                     vars.to.regress = c("nCount_RNA", "percent.mt"),
+                     verbose = FALSE)
+
+#Run PCA and UMAP dim reduction
+HE002 <- RunPCA(HE002, verbose = FALSE)
+HE002 <- RunUMAP(HE002, reduction = "pca", dims = 1:30)
+
+#Find neighbors and identify clusters
+HE002 <- FindNeighbors(HE002, reduction = "pca", dims = 1:30)
+HE002 <- FindClusters(HE002, verbose = F)
+
+#Visualization
+p1 <- DimPlot(HE002, reduction = "umap", group.by = "orig.ident")
+p2 <- DimPlot(HE002, reduction = "umap", label = TRUE, repel = TRUE)
+p1 + p2
+
+#Plot select genes
+FeaturePlot(object = HE002, features = c("GNLY"), 
+            label = TRUE, pt.size = 0.5, cols = c("lightgrey","red"), 
+            min.cutoff = "q9")
+
+#Subset B cell clusters
+HE002 <- subset(x = HE002, subset = seurat_clusters != 11)
+
+table(HE002@meta.data$SCT_snn_res.0.8)
+
+#Retransform B cell cluster's data
+HE002 <- SCTransform(HE002, method = "glmGamPoi", 
+                     vars.to.regress = c("nCount_RNA", "percent.mt"), 
+                     verbose = FALSE)
+
+#Run PCA and UMAP dim reduction
+HE002 <- RunPCA(HE002, verbose = FALSE)
+HE002 <- RunUMAP(HE002, reduction = "pca", dims = 1:30)
+
+# Find neighbors and identify clusters
+HE002 <- FindNeighbors(HE002, reduction = "pca", dims = 1:30)
+HE002 <- FindClusters(HE002, verbose = F)
+
+# Visualization
+p1 <- DimPlot(HE002, reduction = "umap", group.by = "orig.ident")
+p2 <- DimPlot(HE002, reduction = "umap", label = TRUE, repel = TRUE)
+p1 + p2
+
+
+#Load loom file for HE002
+ldat127 <- ReadVelocity(file = "/velo_HE002/possorted_genome_bam_5AS2Q.loom")
+
+#Rename columns of loom file and merge with Seurat object
+for (i in names(x = ldat127)) {
+  #Store assay in a new variable
+  assay <- ldat127[[i]]
+  
+#Rename cell names in loom file to match cell names in Seurat object
+  colnames(assay) <- gsub('possorted_genome_bam_5AS2Q:', '', colnames(assay))
+  colnames(assay) <- gsub('x', '', colnames(assay))
+  colnames(assay) <- paste(colnames(assay), "-1", sep = "")
+  
+#Subset to filtered cells in Seurat object
+  assay <- assay[,colnames(HE002)]
+  
+# Add assay to Seurat object
+  HE002[[i]] <- CreateAssayObject(counts = assay)
+}
+
+HE002
+
+----------------------------------------------------------------------------------------------------------
+
+##Donor HE005
+
+#Load and pre-process HE005 data
+HE005_data <- Read10X(data.dir = 'HE005-Donor131/')
+
+#Create a seurat object for this donor
+HE005 <- CreateSeuratObject(count = HE005_data, project = 'HE005', min.cells = 5)
+HE005$donor <- "HE005_donor_131"
+HE005$ag_gp <- "4day"
+  
+#QC filtering for HE005
+HE005[["percent.mt"]] <- PercentageFeatureSet(object = HE005, pattern = "^MT-")
+HE005 <- subset(x = HE005, subset = nFeature_RNA > 200 & nFeature_RNA < 5000 & 
+                  percent.mt >  -Inf & percent.mt < 15)
+
+#SCT Transformation
+HE005 <- SCTransform(HE005, method = "glmGamPoi", 
+                     vars.to.regress =  c("nCount_RNA", "percent.mt"),
+                     verbose = FALSE)
+
+#Run PCA and UMAP dim reduction
+HE005 <- RunPCA(HE005, verbose = FALSE)
+HE005 <- RunUMAP(HE005, reduction = "pca", dims = 1:30)
+
+#Find neighbors and identify clusters
+HE005 <- FindNeighbors(HE005, reduction = "pca", dims = 1:30)
+HE005 <- FindClusters(HE005, verbose = F)
+
+#Visualization
+p1 <- DimPlot(HE005, reduction = "umap", group.by = "orig.ident")
+p2 <- DimPlot(HE005, reduction = "umap", label = TRUE, repel = TRUE)
+p1 + p2
+
+#Plot select genes
+FeaturePlot(object = HE005, features = c("TRDC"), 
+            label = TRUE, pt.size = 0.5, cols = c("lightgrey","red"), 
+            min.cutoff = "q9")
+
+#Subset B cell clusters
+HE005 <- subset(x = HE005, subset = seurat_clusters != 11)
+HE005 <- subset(x = HE005, subset = seurat_clusters != 12)
+
+table(HE005@meta.data$SCT_snn_res.0.8)
+
+#Re-transform B cell cluster's data
+HE005 <- SCTransform(HE005, method = "glmGamPoi", 
+                     vars.to.regress = c("nCount_RNA", "percent.mt"),
+                     verbose = FALSE)
+
+#Run PCA and UMAP dim reduction
+HE005 <- RunPCA(HE005, verbose = FALSE)
+HE005 <- RunUMAP(HE005, reduction = "pca", dims = 1:30)
+
+#Find neighbors and identify clusters
+HE005 <- FindNeighbors(HE005, reduction = "pca", dims = 1:30)
+HE005 <- FindClusters(HE005, verbose = F)
+
+#Visualization
+p1 <- DimPlot(HE005, reduction = "umap", group.by = "orig.ident")
+p2 <- DimPlot(HE005, reduction = "umap", label = TRUE, repel = TRUE)
+p1 + p2
+
+#Load loom file for HE005
+ldat <- ReadVelocity(file = "/velo_HE005/possorted_genome_bam_44T2Z.loom")
+
+#Rename columns of loom file and merge with Seurat object
+for (i in names(x = ldat)) {
+  #Store assay in a new variable
+  assay <- ldat[[i]]
+  
+#Rename cell names in loom file to match cell names in Seurat object
+  colnames(assay) <- gsub('possorted_genome_bam_44T2Z:', '', colnames(assay))
+  colnames(assay) <- gsub('x', '', colnames(assay))
+  colnames(assay) <- paste(colnames(assay), "-1", sep = "")
+  
+#Subset to filtered cells in Seurat object
+  assay <- assay[,colnames(HE005)]
+  
+#Add assay to Seurat object
+  HE005[[i]] <- CreateAssayObject(counts = assay)
+}
+
+HE005
+
+--------------------------------------------------------------------------------------------------------
+  
+##Donor HE006
+  
+#Load and pre-process HE006 data
+HE006_data <- Read10X(data.dir = 'HE006-Donor73/')
+
+#Create a seurat object for this donor
+HE006 <- CreateSeuratObject(count = HE006_data, project = 'HE006', min.cells = 5)
+HE006$donor <- "HE006_donor_73"
+HE006$ag_gp <- "4day"
+
+#QC filtering for HE006
+HE006[["percent.mt"]] <- PercentageFeatureSet(object = HE006, pattern = "^MT-")
+HE006 <- subset(x = HE006, subset = nFeature_RNA > 200 & 
+                    nFeature_RNA < 5000 & 
+                    percent.mt >  -Inf & percent.mt < 15)
+
+#SCT Transformation
+HE006 <- SCTransform(HE006, method = "glmGamPoi", 
+                     vars.to.regress = c("nCount_RNA", "percent.mt"),
+                     verbose = FALSE)
+
+#Run PCA and UMAP dim reduction
+HE006 <- RunPCA(HE006, verbose = FALSE)
+HE006 <- RunUMAP(HE006, reduction = "pca", dims = 1:30)
+
+#Find neighbors and identify clusters
+HE006 <- FindNeighbors(HE006, reduction = "pca", dims = 1:30)
+HE006 <- FindClusters(HE006, verbose = F)
+
+#Visualization
+p1 <- DimPlot(HE006, reduction = "umap", group.by = "orig.ident")
+p2 <- DimPlot(HE006, reduction = "umap", label = TRUE, repel = TRUE)
+p1 + p2
+
+#Plot select genes
+FeaturePlot(object = HE006, features = c("CD3D"), 
+            label = TRUE, pt.size = 0.5, cols = c("lightgrey","red"), 
+            min.cutoff = "q9")
+
+#Subset B cell clusters
+HE006 <- subset(x = HE006, subset = seurat_clusters != 11)
+HE006 <- subset(x = HE006, subset = seurat_clusters != 12)
+
+table(HE006@meta.data$SCT_snn_res.0.8)
+
+#Re-transform B cell cluster's data
+HE006 <- SCTransform(HE006, method = "glmGamPoi", 
+                     vars.to.regress = c("nCount_RNA", "percent.mt"), 
+                     verbose = FALSE)
+
+#Run PCA and UMAP dim reduction
+HE006 <- RunPCA(HE006, verbose = FALSE)
+HE006 <- RunUMAP(HE006, reduction = "pca", dims = 1:30)
+
+#Find neighbors and identify clusters
+HE006 <- FindNeighbors(HE006, reduction = "pca", dims = 1:30)
+HE006 <- FindClusters(HE006, verbose = F)
+
+#Visualization
+p1 <- DimPlot(HE006, reduction = "umap", group.by = "orig.ident")
+p2 <- DimPlot(HE006, reduction = "umap", label = TRUE, repel = TRUE)
+p1 + p2
+
+#Load loom file for HE006
+ldat <- ReadVelocity(file = "/velo_HE006/possorted_genome_bam_9T2D7.loom")
+
+#Rename columns of loom file and merge with Seurat object
+for (i in names(x = ldat)) {
+  #Store assay in a new variable
+  assay <- ldat[[i]]
+  
+#Rename cell names in loom file to match cell names in Seurat object
+  colnames(assay) <- gsub('possorted_genome_bam_9T2D7:', '', colnames(assay))
+  colnames(assay) <- gsub('x', '', colnames(assay))
+  colnames(assay) <- paste(colnames(assay), "-1", sep = "")
+  
+#Subset to filtered cells in Seurat object
+  assay <- assay[,colnames(HE006)]
+  
+# Add assay to Seurat object
+  HE006[[i]] <- CreateAssayObject(counts = assay)
+}
+
+HE006
+
+-------------------------------------------------------------------------------------------------------
+
+##Donor HE007
+  
+#Load and pre-process HE007 data
+HE007_data <- Read10X(data.dir = 'HE007-Donor29/')
+
+# Create a seurat object for HE007
+HE007 <- CreateSeuratObject(count = HE007_data, project = 'HE007', min.cells = 5)
+HE007$donor <- "HE007_donor_29"
+HE007$ag_gp <- "4mo"
+
+#QC filtering for HE007
+HE007[["percent.mt"]] <- PercentageFeatureSet(object = HE007, pattern = "^MT-")
+HE007 <- subset(x = HE007, subset = nFeature_RNA > 200 & 
+                    nFeature_RNA < 6000 & 
+                    percent.mt >  -Inf & percent.mt < 15)
+
+#SCT Transformation
+HE007 <- SCTransform(HE007, method = "glmGamPoi", 
+                     vars.to.regress =  c("nCount_RNA", "percent.mt"),  
+                     verbose = FALSE)
+
+#Run PCA and UMAP dim reduction
+HE007 <- RunPCA(HE007, verbose = FALSE)
+HE007 <- RunUMAP(HE007, reduction = "pca", dims = 1:30)
+
+#Find neighbors and identify clusters
+HE007 <- FindNeighbors(HE007, reduction = "pca", dims = 1:30)
+HE007 <- FindClusters(HE007, verbose = F)
+
+#Visualization
+p1 <- DimPlot(HE007, reduction = "umap", group.by = "orig.ident")
+p2 <- DimPlot(HE007, reduction = "umap", label = TRUE, repel = TRUE)
+p1 + p2
+
+#Plot select genes
+FeaturePlot(object = HE007, features = c("TRDC"), 
+            label = TRUE, pt.size = 0.5, cols = c("lightgrey","red"), 
+            min.cutoff = "q9")
+
+#Subset B cell clusters
+HE007 <- subset(x = HE007, subset = seurat_clusters != 11)
+table(HE007@meta.data$seurat_clusters)
+
+#Re-transform B cell cluster's data
+HE007 <- SCTransform(HE007, method = "glmGamPoi", 
+                     vars.to.regress =  c("nCount_RNA", "percent.mt"),  
+                     verbose = FALSE)
+
+#Run PCA and UMAP dim reduction
+HE007 <- RunPCA(HE007, verbose = FALSE)
+HE007 <- RunUMAP(HE007, reduction = "pca", dims = 1:30)
+
+#Find neighbors and identify clusters
+HE007 <- FindNeighbors(HE007, reduction = "pca", dims = 1:30)
+HE007 <- FindClusters(HE007, verbose = F)
+
+#Visualization
+p1 <- DimPlot(HE007, reduction = "umap", group.by = "orig.ident")
+p2 <- DimPlot(HE007, reduction = "umap", label = TRUE, repel = TRUE)
+p1 + p2
+
+#Load loom file for HE007
+ldat <- ReadVelocity(file = "/velo_HE007/possorted_genome_bam_67MT2.loom")
+
+#Rename columns of loom file and merge with Seurat object
+for (i in names(x = ldat)) {
+  #Store assay in a new variable
+  assay <- ldat[[i]]
+  
+#Rename cell names in loom file to match cell names in Seurat object
+  colnames(assay) <- gsub('possorted_genome_bam_67MT2:', '', colnames(assay))
+  colnames(assay) <- gsub('x', '', colnames(assay))
+  colnames(assay) <- paste(colnames(assay), "-1", sep = "")
+  
+#Subset to filtered cells in Seurat object
+  assay <- assay[,colnames(HE007)]
+  
+#Add assay to Seurat object
+  HE007[[i]] <- CreateAssayObject(counts = assay)
+}
+
+HE007
+
+------------------------------------------------------------------------------------------------------
+  
+##Donor HE008
+  
+#Load and pre-process HE008 data
+HE008_data <- Read10X(data.dir = 'HE008-Donor135/')
+
+#Create a seurat object HE008
+HE008 <- CreateSeuratObject(count = HE008_data, project = 'HE008', min.cells = 5)
+HE008$donor <- "HE008_donor_135"
+HE008$ag_gp <- "4mo"
+
+#QC filtering for HE008
+HE008[["percent.mt"]] <- PercentageFeatureSet(object = HE008, pattern = "^MT-")
+HE008 <- subset(x = HE008, subset = nFeature_RNA > 200 & 
+                    nFeature_RNA < 6000 & 
+                    percent.mt >  -Inf & percent.mt < 15)
+
+#SCT Transformation
+HE008 <- SCTransform(HE008, method = "glmGamPoi", 
+                     vars.to.regress = c("nCount_RNA", "percent.mt"), 
+                     verbose = FALSE)
+
+#Run PCA and UMAP dim reduction
+HE008 <- RunPCA(HE008, verbose = FALSE)
+HE008 <- RunUMAP(HE008, reduction = "pca", dims = 1:30)
+
+#Find neighbors and identify clusters
+HE008 <- FindNeighbors(HE008, reduction = "pca", dims = 1:30)
+HE008 <- FindClusters(HE008, verbose = F)
+
+#Visualization
+p1 <- DimPlot(HE008, reduction = "umap", group.by = "orig.ident")
+p2 <- DimPlot(HE008, reduction = "umap", label = TRUE, repel = TRUE)
+p1 + p2
+
+#Plot select genes
+FeaturePlot(object = HE008, features = c("TRDC"), 
+            label = TRUE, pt.size = 0.5, cols = c("lightgrey","red"), 
+            min.cutoff = "q9")
+
+#Subset B cell clusters
+HE008 <- subset(x = HE008, subset = seurat_clusters != 11)
+table(HE008@meta.data$seurat_clusters)
+
+#Re-transform B cell cluster's data
+HE008 <- SCTransform(HE008, method = "glmGamPoi", 
+                     vars.to.regress = c("nCount_RNA", "percent.mt"), 
+                     verbose = FALSE)
+
+#Run PCA and UMAP
+HE008 <- RunPCA(HE008, verbose = FALSE)
+HE008 <- RunUMAP(HE008, reduction = "pca", dims = 1:30)
+
+#Find neighbors and identify clusters
+HE008 <- FindNeighbors(HE008, reduction = "pca", dims = 1:30)
+HE008 <- FindClusters(HE008, verbose = F)
+
+#Visualization
+p1 <- DimPlot(HE008, reduction = "umap", group.by = "orig.ident")
+p2 <- DimPlot(HE008, reduction = "umap", label = TRUE, repel = TRUE)
+p1 + p2
+
+#Load loom file for HE008
+ldat <- ReadVelocity(file = "/velo_HE008/possorted_genome_bam_DTGIN.loom")
+
+#Rename columns of loom file and merge with Seurat object
+for (i in names(x = ldat)) {
+  #Store assay in a new variable
+  assay <- ldat[[i]]
+  
+#Rename cell names in loom file to match cell names in Seurat object
+  colnames(assay) <- gsub('possorted_genome_bam_DTGIN:', '', colnames(assay))
+  colnames(assay) <- gsub('x', '', colnames(assay))
+  colnames(assay) <- paste(colnames(assay), "-1", sep = "")
+  
+#Subset to filtered cells in Seurat object
+  assay <- assay[,colnames(HE008)]
+  
+#Add assay to Seurat object
+  HE008[[i]] <- CreateAssayObject(counts = assay)
+}
+
+HE008
+
+-------------------------------------------------------------------------------------------------
+  
+##Data Integration and batch correction for multiple samples
+
+#Combine all the donors
+objects_list = list(HE001,HE002,HE005,HE006,HE007,HE008)
+
+
+#Integrate data using Seurat
+features <- SelectIntegrationFeatures(object.list = objects_list, 
+                                      nfeatures = 3000)
+
+objects_list <- PrepSCTIntegration(object.list = objects_list, 
+                                   anchor.features = features)
+
+#Integrate the data
+thymus.anchors <- FindIntegrationAnchors(object.list = objects_list, 
+                                         normalization.method = "SCT", 
+                                         anchor.features = features,
+                                         reduction = 'rpca',
+                                         dims = 1:50)
+
+thymus.combined <- IntegrateData(anchorset = thymus.anchors, 
+                                 normalization.method = "SCT",
+                                 dims = 1:50)
+
+#Add batch annotation
+batch = c()
+for (i in 1:length(thymus.combined@meta.data$orig.ident)) {
+  if ((thymus.combined@meta.data$orig.ident[i] == "HE001")) {
+    batch[i] <- "batch1"
+  }
+  if ((thymus.combined@meta.data$orig.ident[i] == "HE002")) {
+    batch[i] <- "batch1"
+  }
+  if ((thymus.combined@meta.data$orig.ident[i] == "HE005")) {
+    batch[i] <- "batch2"
+  }
+  if ((thymus.combined@meta.data$orig.ident[i] == "HE006")) {
+    batch[i] <- "batch2"
+  }
+  if ((thymus.combined@meta.data$orig.ident[i] == "HE007")) {
+    batch[i] <- "batch2"
+  }
+  if ((thymus.combined@meta.data$orig.ident[i] == "HE008")) {
+    batch[i] <- "batch2"
+  }
+}
+
+thymus.combined$batch = batch
+
+#Add new age_gp annotation
+new_ag = c()
+
+for (i in 1:length(thymus.combined@meta.data$orig.ident)) {
+  if ((thymus.combined@meta.data$orig.ident[i] == "HE001")) {
+    new_ag[i] <- "four_mo"
+  }
+  if ((thymus.combined@meta.data$orig.ident[i] == "HE002")) {
+    new_ag[i] <- "four_day"
+  }
+  if ((thymus.combined@meta.data$orig.ident[i] == "HE005")) {
+    new_ag[i] <- "four_day"
+  }
+  if ((thymus.combined@meta.data$orig.ident[i] == "HE006")) {
+    new_ag[i] <- "four_day"
+  }
+  if ((thymus.combined@meta.data$orig.ident[i] == "HE007")) {
+    new_ag[i] <- "four_mo"
+  }
+  if ((thymus.combined@meta.data$orig.ident[i] == "HE008")) {
+    new_ag[i] <- "four_mo"
+  }
+}
+
+thymus.combined$new_ag = new_ag
+
+#Set default assay to integrated
+DefaultAssay(object = thymus.combined) <- "integrated"
+
+#Run PCA and UMAP
+thymus.combined <- RunPCA(thymus.combined, features = features, verbose = FALSE)
+ElbowPlot(object = thymus.combined, ndims = 30)
+ndims = 1:30
+thymus.combined <- RunUMAP(thymus.combined, reduction = "pca", 
+                           dims = ndims)
+
+#Find neighbors and identify clusters
+DefaultAssay(object = thymus.combined) <- "integrated"
+thymus.combined <- FindNeighbors(thymus.combined, reduction = "pca", 
+                                 dims = ndims)
+thymus.combined <- FindClusters(thymus.combined, resolution = 0.0,
+                                dims = ndims)
+
+#Selecting optimal clustering resolution
+clustree(thymus.combined, prefix = "integrated_snn_res.")
+
+#Visualization
+p1 <- DimPlot(thymus.combined, reduction = "umap", group.by = "orig.ident")
+p2 <- DimPlot(thymus.combined, reduction = "umap", label = TRUE, repel = TRUE,
+              group.by = "integrated_snn_res.0.1")
+print(p1 + p2)
+
+#Visualize 4 months vs 4 days
+DimPlot(object = thymus.combined, reduction = "umap", 
+        split.by = "ag_gp", label = T, pt.size = 0.3) + NoLegend()
+
+#Merge clusters
+thymus.combined <- FindClusters(thymus.combined, resolution = 0.1, dims = ndims)
+levels(thymus.combined)
+new.cluster.ids <- c("3", "3", "2", "3", "0", "1")
+names(new.cluster.ids) <- levels(thymus.combined)
+thymus.combined <- RenameIdents(thymus.combined, new.cluster.ids)
+DimPlot(thymus.combined, reduction = "umap", label = TRUE, pt.size = 0.5) + NoLegend()
+
+#Visualization
+p1 <- DimPlot(thymus.combined, reduction = "umap", group.by = "orig.ident")
+p2 <- DimPlot(thymus.combined, reduction = "umap", label = TRUE, repel = TRUE)
+print(p1 + p2)
+
+#Visualize 4 months vs 4 days
+DimPlot(object = thymus.combined, reduction = "umap", 
+        split.by = "ag_gp", label = T, pt.size = 0.3) + NoLegend()
+
+#Normalize and scale the data on the RNA assay
+DefaultAssay(thymus.combined) <- "RNA"
+thymus.combined <- NormalizeData(thymus.combined)
+thymus.combined <- ScaleData(thymus.combined, 
+                             vars.to.regress = c("nCount_RNA", "percent.mt", "batch"),
+                             features = features)
+
+#Find markers for all the cells
+thymus.markers <- FindAllMarkers(object = thymus.combined, 
+                                 only.pos = TRUE, 
+                                 test.use = "MAST",
+                                 logfc.threshold = 0.25,
+                                 latent.vars = "batch",
+                                 features = features)
+
+all.clust.markers <- FindAllMarkers(object = thymus.combined, 
+                                    only.pos = FALSE, 
+                                    test.use = "MAST",
+                                    logfc.threshold = 0.25,
+                                    latent.vars = "batch", 
+                                    features = features)
+
+all.clust.markers %>% group_by(cluster)
+write.csv(all.clust.markers, 
+          '/4cluster_markers.csv')
+
+#Heatmap for top 30 markers for each cluster
+top30 <- thymus.markers %>% group_by(cluster) %>% top_n(n = 30, wt = avg_log2FC)
+p1 <- DoHeatmap(object = thymus.combined, features = top30$gene) + NoLegend()
+print(p1)
+
+#Add column with custom ordering of clusters
+vals <- top30$cluster
+res_list <- c()
+
+#forclusters 
+for (i in 1:length(vals)){
+  if (vals[i] == 0) {
+    res_list[i] <- c(0)
+  }
+  if (vals[i] == 1) {
+    res_list[i] <- c(1)
+  }
+  if (vals[i] == 2) {
+    res_list[i] <- c(2)
+  }
+  if (vals[i] == 3) {
+    res_list[i] <- c(3)
+  }
+
+top30['custom_clust'] <- res_list
+top30 <- top10 %>% arrange(custom_clust)
+
+#Change order of clusters on heatmap
+levels (thymus.combined)
+levels(thymus.combined) <- c(0,1,2,3)
+levels (thymus.combined)
+
+#Visualization
+p1 <- DimPlot(thymus.combined, reduction = "umap", group.by = "orig.ident")
+p2 <- DimPlot(thymus.combined, reduction = "umap", label = TRUE, repel = TRUE)
+p1 + p2
+
+DimPlot(object = thymus.combined, reduction = "umap", 
+        split.by = "ag_gp", label = T, pt.size = 0.3) + NoLegend()
+
+p1 <- DoHeatmap(object = thymus.combined, features = top10$gene, 
+                draw.lines = TRUE, lines.width = 20, assay = "RNA",
+                slot = "scale.data") +
+  scale_fill_gradientn(colors = c("blue", "white", "red"))
+print(p1)
+
+#Generate Heatmap with average expression
+thy_cluster.averages <- AverageExpression(thymus.combined, return.seurat = TRUE)
+DoHeatmap(thy_cluster.averages, features = unlist(top30$gene), 
+          size = 3, 
+          draw.lines = FALSE)+ 
+  scale_fill_gradientn(colors = c("blue", "white", "red"))
+
+#Plot selected genes in a loop
+g_list <- c('IGHD', 'HLA-DMB', 'CD69', 'CD37', 'CD22', 'LY86', 'CD24', 'CD52',
+            'HLA-DPB1', 'HLA-DPA1', 'HLA-DQB2', 'HLA-DQB1', 'HLA-DQA1',
+            'TNFRSF13C', 'HVCN1', 'HLA-DRA', 'CD79B', 'CD44', 'HMGN2', 'MKI67',
+            'RRM2', 'TYMS', 'UBE2C', 'PCNA', 'HMGB2', 'CCL22', 'SDC1', 'PRDM1',
+            'IGHG4', 'IGHG3', 'IGHG1', 'IGHG2', 'JCHAIN', 'IGHA2', 'XBP1',
+            'IGHM', 'ITM2C', 'MZB1', 'IGHA1', 'CD27', 'PRDX4', 'PDIA4',
+            'HSP90B1', 'IGHE', 'CD59', 'CD79A', 'AICDA', 'AIRE','CD86',
+            'CCL17','DUSP4','CCR7','CD9','EBI3','CCL4'
+)
+
+g_list1 <- c('IGHD', 'HLA-DMB', 'CD69', 'CD37', 'CD22', 'LY86', 'CD24', 'CD52',
+             'HLA-DPB1', 'HLA-DPA1', 'HLA-DQB2', 'HLA-DQB1', 'HLA-DQA1',
+             'TNFRSF13C', 'HVCN1', 'HLA-DRA', 'CD79B', 'CD44', 'HMGN2', 'MKI67',
+             'RRM2', 'TYMS', 'UBE2C', 'PCNA', 'HMGB2', 'CCL22', 'SDC1', 'PRDM1')
+
+g_list2 <- c('IGHG4', 'IGHG3', 'IGHG1', 'IGHG2', 'JCHAIN', 'IGHA2', 'XBP1',
+             'IGHM', 'ITM2C', 'MZB1', 'IGHA1', 'CD27', 'PRDX4', 'PDIA4',
+             'HSP90B1', 'IGHE', 'CD59', 'CD79A', 'AICDA', 'AIRE','CD86',
+             'CCL17','DUSP4','CCR7','CD9','EBI3','CCL4')
+
+DefaultAssay(object = thymus.combined ) <- "RNA"
+
+#Plot select genes in a loop
+pdf('/selected_genes_umap_4clusters.pdf', 
+    width = 6, height = 5)
+
+#Start loop
+new_genes <- read.csv("./List of genes.csv")
+head(new_genes)
+
+new_glist <- new_genes$Selected_genes_individual_UMAP %>% unlist()
+new_glist
+
+for (gene in new_glist){
+  plot <- FeaturePlot(object = thymus.combined , features = gene, reduction = 'umap',
+                      pt.size = 0.5, cols = c("lightgrey","red"), label = TRUE,
+                      min.cutoff = "q9") 
+  print(plot)
+}
+dev.off()
+
+#Plot select genes in a loop
+pdf('///new_gene_list_umap_6clusters.pdf', 
+    width = 6, height = 5)
+
+
+#Make dot plots
+DotPlot(thymus.combined, features = g_list1, cols = c("blue", "red"), 
+        dot.scale = 8, split.by = "ag_gp") + 
+  RotatedAxis()
+
+DotPlot(thymus.combined, features = g_list2, cols = c("blue", "red"), 
+        dot.scale = 8, split.by = "ag_gp") + 
+  RotatedAxis()
+
+## DE BETWEEN TWO AGE GROUPS per CLUSTER
+thymus.combined$age_cluster <- paste(thymus.combined$new_ag,
+                                     Idents(thymus.combined),
+                                     sep = "_")
+
+Idents(thymus.combined) <- "age_cluster"
+
+#Cluster 0
+cl0 <- FindMarkers(thymus.combined,
+                   ident.1 = "four_day_0",
+                   ident.2 = "four_mo_0",
+                   verbose = FALSE)
+cl0_genes <- cl0 %>% arrange(p_val_adj) %>% head(20) %>% row.names()
+
+#Cluster 1
+cl1 <- FindMarkers(thymus.combined,
+                   ident.1 = "four_day_1",
+                   ident.2 = "four_mo_1",
+                   verbose = FALSE)
+cl1_genes <- cl1 %>% arrange(p_val_adj) %>% head(20) %>% row.names()
+
+#Cluster 2
+cl2 <- FindMarkers(thymus.combined,
+                   ident.1 = "four_day_2",
+                   ident.2 = "four_mo_2",
+                   verbose = FALSE)
+cl2_genes <- cl2 %>% arrange(p_val_adj) %>% head(20) %>% row.names()
+
+#Cluster 3
+cl3 <- FindMarkers(thymus.combined,
+                   ident.1 = "four_day_3",
+                   ident.2 = "four_mo_3",
+                   verbose = FALSE)
+cl3_genes <- cl3 %>% arrange(p_val_adj) %>% head(20) %>% row.names()
+
+#Make plots for the DE genes
+theme_set(theme_cowplot())
+Idents(thymus.combined) <- "integrated_snn_res.0.1"
+new.cluster.ids <- c("3", "3", "2", "3", "0", "1")
+names(new.cluster.ids) <- levels(thymus.combined)
+thymus.combined <- RenameIdents(thymus.combined, new.cluster.ids)
+levels(thymus.combined)
+
+#Select the integrated data
+DefaultAssay(thymus.combined) <- "integrated"
+
+#Select Cluster0
+clust0 <- subset(thymus.combined, idents = "0")
+Idents(clust0) <- "new_ag"
+avg.c0.cells <- as.data.frame(log1p(AverageExpression(clust0, verbose = FALSE)$RNA))
+avg.c0.cells$gene <- rownames(avg.c0.cells)
+
+#Plot "4 days vs 4 months" for Cluster 0
+p1 <- ggplot(avg.c0.cells, aes(four_day, four_mo)) + geom_point() + ggtitle("Cluster0 cells")
+p1 <- LabelPoints(plot = p1, points = cl0_genes, repel = TRUE, xnudge = 0, ynudge = 0)
+print(p1)
+
+#Select Cluster1
+clust1 <- subset(thymus.combined, idents = "1")
+Idents(clust1) <- "new_ag"
+avg.c1.cells <- as.data.frame(log1p(AverageExpression(clust1, verbose = FALSE)$RNA))
+avg.c1.cells$gene <- rownames(avg.c1.cells)
+
+#Plot "4 days vs 4 months" for Cluster 1
+p1 <- ggplot(avg.c1.cells, aes(four_day, four_mo)) + geom_point() + ggtitle("Cluster1 cells")
+p1 <- LabelPoints(plot = p1, points = cl1_genes, repel = TRUE, xnudge = 0, ynudge = 0)
+print(p1)
+
+#Select Cluster2
+clust2 <- subset(thymus.combined, idents = "2")
+Idents(clust2) <- "new_ag"
+avg.c2.cells <- as.data.frame(log1p(AverageExpression(clust2, verbose = FALSE)$RNA))
+avg.c2.cells$gene <- rownames(avg.c2.cells)
+
+#Plot "4 days vs 4 months" for Cluster 2
+p1 <- ggplot(avg.c2.cells, aes(four_day, four_mo)) + geom_point() + ggtitle("Cluster2 cells")
+p1 <- LabelPoints(plot = p1, points = cl2_genes, repel = TRUE, xnudge = 0, ynudge = 0)
+print(p1)
+
+#Cluster3
+clust3 <- subset(thymus.combined, idents = "3")
+Idents(clust3) <- "new_ag"
+avg.c3.cells <- as.data.frame(log1p(AverageExpression(clust3, verbose = FALSE)$RNA))
+avg.c3.cells$gene <- rownames(avg.c3.cells)
+
+#Plot "4 days vs 4 months" for Cluster 3
+p1 <- ggplot(avg.c3.cells, aes(four_day, four_mo)) + geom_point() + ggtitle("Cluster3 cells")
+p1 <- LabelPoints(plot = p1, points = cl3_genes, repel = TRUE, xnudge = 0, ynudge = 0)
+print(p1)
+
+#Frequency of each sample in each cluster
+df <-table(thymus.combined@active.ident, thymus.combined@meta.data$orig.ident)
+df[,] = apply(df[,],2,function(x){x/sum(x)})
+df = as.data.frame(df)
+names(df)[2] <- "Donor"
+df$Percent <- df$Freq*100
+
+new_ag2 = c()
+
+for (i in 1:length(df$Donor)) {
+  if ((df$Donor[i] == "HE001")) {
+    new_ag2[i] <- "four_mo"
+  }
+  if ((df$Donor[i] == "HE002")) {
+    new_ag2[i] <- "four_day"
+  }
+  if ((df$Donor[i] == "HE005")) {
+    new_ag2[i] <- "four_day"
+  }
+  if ((df$Donor[i] == "HE006")) {
+    new_ag2[i] <- "four_day"
+  }
+  if ((df$Donor[i] == "HE007")) {
+    new_ag2[i] <- "four_mo"
+  }
+  if ((df$Donor[i] == "HE008")) {
+    new_ag2[i] <- "four_mo"
+  }
+}
+
+df$new_ag = new_ag2
+df
+
+df$Var1 <- factor(df$Var1,
+                  levels = c('0','1', '2', '3'),ordered = TRUE)
+df
+
+boxplt <- ggplot(df, aes(x = Var1, y = Percent, fill = new_ag)) +
+  geom_boxplot(aes(fill = new_ag), position = position_dodge(0.9))+
+  stat_boxplot(geom = "errorbar", width = 0.5, position = position_dodge(0.9)) +
+  geom_dotplot(aes(fill = new_ag, color = Donor),
+               stroke = 5,
+               binaxis = 'y',
+               dotsize = 0.5,
+               stackdir = 'center',
+               position = position_dodge(0.9)) +
+  xlab("Cluster") + ylab("Percent per sample") +
+  theme(text = element_text(size = 25),
+        
+        legend.key.size = unit(1.5,"line")) +
+  scale_fill_manual(values = c("#00AFBB", "#E7B800","red", "green", "blue", 
+                               "orange", "black", "purple")) +
+  scale_color_manual(values = c("red", "green", "blue", 
+                                "orange", "cyan", "purple"))+
+  stat_compare_means(aes(group = new_ag), label = "p.signif")
+
+boxplt
+
+#The actual stats run on the frequency data
+compare_means(Freq ~ new_ag,  data = df, group.by = c("Var1"))
+
+##Run RNA velocity
+DefaultAssay(object = thymus.combined ) <- "integrated"
+thymus.combined <- RunVelocity(object = thymus.combined , deltaT = 1, 
+                               kCells = 25, 
+                               fit.quantile = 0.05,
+                               ncores = 30, verbose = T)
+
+ident.colors <- (scales::hue_pal())(n = length(x = levels(x = thymus.combined )))
+names(x = ident.colors) <- levels(x = thymus.combined )
+cell.colors <- ident.colors[Idents(object = thymus.combined )]
+names(x = cell.colors) <- colnames(x = thymus.combined )
+plot <- show.velocity.on.embedding.cor(emb = Embeddings(object = thymus.combined , reduction = "umap"), 
+                                       vel = Tool(object = thymus.combined , slot = "RunVelocity"), 
+                                       n = 200, scale = "log", 
+                                       cell.colors = ac(x = cell.colors, alpha = 0.5), 
+                                       cex = 0.8, arrow.scale = 2, show.grid.flow = TRUE,
+                                       min.grid.cell.mass = 0.5, 
+                                       grid.n = 40, arrow.lwd = 1, do.par = FALSE, 
+                                       cell.border.alpha = 0.1,
+                                       n.cores = 30)
+print(plot)
