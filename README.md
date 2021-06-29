@@ -1,6 +1,6 @@
 # natcomms-2021
 
-Code for bulk RNA Seq and single cell RNA Seq analysis
+Code for the manuscript
 
 ### Intrathymic differentiation of natural antibody-producing plasma cells in human neonates
 
