@@ -8,7 +8,7 @@ Hector Cordero, Rodney G. King, Pranay Dogra, Chloe Dufeu, Sarah B. See, Alexand
 
 
 ### Publication
-Link pending
+DOI:10.1038/s41467-021-26069-2
 
 ### GEO data upload for bulk RNASeq (GSE152453)
 https://www.ncbi.nlm.nih.gov/gds/?term=GSE152453
